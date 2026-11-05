@@ -7,7 +7,7 @@
  */
 
 export type LineProductButtonMode = "link" | "message" | "both";
-/** Where the link button goes: storefront quick-order (adds to cart, opens /cart) or product page. */
+/** Where the link button goes: storefront quick-order (adds to cart, opens /checkout) or product page. */
 export type LineLinkTarget = "cart" | "product";
 
 export type LineReplySettings = {
@@ -63,7 +63,7 @@ export const LINE_CART_QTY_MAX = 8;
 const ORDER_POSTBACK_ACTION = "order";
 
 export const DEFAULT_LINE_REPLY_SETTINGS: LineReplySettings = {
-  // Default: "สั่งซื้อสินค้า" adds to the storefront cart and opens /cart;
+  // Default: "สั่งซื้อสินค้า" adds to the storefront cart and opens /checkout;
   // "สอบถามแอดมิน" posts into chat so the bot can auto-reply.
   button_mode: "both",
   link_label: "สั่งซื้อสินค้า",
@@ -224,7 +224,7 @@ export function parseOrderPostbackData(data: unknown): string | null {
 
 /**
  * Storefront quick-order link: adds the SKU to the cart (after LINE login if needed)
- * and opens /cart. `nonce` lets the storefront ignore repeat taps of the same card.
+ * and opens /checkout. `nonce` lets the storefront ignore repeat taps of the same card.
  * @param storefrontBase e.g. https://hijibjib.com (no trailing slash)
  * @param skuId SKU id
  * @param quantity items to add

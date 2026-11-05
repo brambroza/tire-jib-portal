@@ -45,7 +45,7 @@ const MODE_OPTIONS: { value: LineProductButtonMode; label: string; hint: string 
 const LINK_TARGET_OPTIONS: { value: LineLinkTarget; label: string; hint: string }[] = [
   {
     value: "cart",
-    label: "ใส่ตะกร้าแล้วเปิดหน้าตะกร้า",
+    label: "ใส่ตะกร้าแล้วไปหน้าชำระเงิน",
     hint: "ถ้าลูกค้ายังไม่ได้ล็อกอิน เว็บจะล็อกอินด้วย LINE ให้ก่อนแล้วพากลับมาใส่ตะกร้า"
   },
   { value: "product", label: "เปิดหน้าสินค้า", hint: "ให้ลูกค้าดูรายละเอียดและเลือกจำนวนเองบนเว็บ" }
