@@ -1232,7 +1232,7 @@ async function fetchCatalogItemById(
   const row = data as any;
   return normalizeCatalogRow({
     ...row,
-    qty_on_hand: row.inventory?.[0]?.qty_on_hand ?? null,
+    qty_on_hand: readQtyOnHand(row.inventory),
     image_url: row.sku_image_embeddings?.[0]?.image_url ?? null,
   });
 }
@@ -1365,7 +1365,7 @@ async function searchCatalogItems(
     .map((row) =>
       normalizeCatalogRow({
         ...row,
-        qty_on_hand: row.inventory?.[0]?.qty_on_hand ?? null,
+        qty_on_hand: readQtyOnHand(row.inventory),
         image_url: row.sku_image_embeddings?.[0]?.image_url ?? null,
       })
     )
@@ -1379,6 +1379,16 @@ async function searchCatalogItems(
     .sort((a, b) => b.score - a.score)
     .slice(0, 10)
     .map((x) => x.row);
+}
+
+/**
+ * qty_on_hand from the embedded `inventory` relation. PostgREST returns an object
+ * when skus -> inventory is one-to-one, and an array otherwise; accept both.
+ */
+function readQtyOnHand(inventory: unknown): number | null {
+  const row = Array.isArray(inventory) ? inventory[0] : inventory;
+  const qty = (row as { qty_on_hand?: unknown } | null | undefined)?.qty_on_hand;
+  return typeof qty === "number" && Number.isFinite(qty) ? qty : null;
 }
 
 function buildProductUrl(productId: string) {
