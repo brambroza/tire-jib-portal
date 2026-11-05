@@ -1369,6 +1369,8 @@ async function searchCatalogItems(
         image_url: row.sku_image_embeddings?.[0]?.image_url ?? null,
       })
     )
+    // Hide out-of-stock SKUs (null = no inventory row; storefront cart treats it as 0 too).
+    .filter((row) => (row.qty_on_hand ?? 0) > 0)
     .map((row) => ({
       row,
       score: scoreCatalogItem(row, parsed),
@@ -1680,8 +1682,10 @@ async function replyWithSearchResult(input: {
           type: "image",
           url: item.image_url,
           size: "full",
-          aspectRatio: "20:13",
-          aspectMode: "cover"
+          // Square + fit: tire photos are mostly square, so show the whole tire instead of cropping it.
+          aspectRatio: "1:1",
+          aspectMode: "fit",
+          backgroundColor: "#FFFFFF"
         }
         : undefined,
       body: {
