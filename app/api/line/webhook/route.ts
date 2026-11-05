@@ -801,6 +801,7 @@ import {
   parseOrderPostbackData,
   renderLineFooterTemplate,
   renderLineMessageTemplate,
+  resolveLinkButtonUrl,
   type LineReplySettings,
   type LineTemplateValues
 } from "../../../../lib/lineReplySettings";
@@ -1393,7 +1394,7 @@ async function loadLineReplySettings(
   const { data, error } = await supabase
     .from("line_reply_settings")
     .select(
-      "button_mode,link_label,message_label,message_template,reply_enabled,reply_template,result_footer_enabled,result_footer_template"
+      "button_mode,link_label,link_target,cart_quantity,message_label,message_template,reply_enabled,reply_template,result_footer_enabled,result_footer_template"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -1705,7 +1706,17 @@ async function replyWithSearchResult(input: {
         type: "box",
         layout: "vertical",
         spacing: "sm",
-        contents: buildLineProductButtons(replySettings, templateValues, productId)
+        contents: buildLineProductButtons(
+          replySettings,
+          templateValues,
+          productId,
+          resolveLinkButtonUrl(replySettings, {
+            storefrontBase,
+            skuId: productId,
+            productUrl: templateValues.url,
+            nonce: crypto.randomBytes(6).toString("base64url")
+          })
+        )
       }
     };
   });

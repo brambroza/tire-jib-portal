@@ -7,6 +7,8 @@ import {
   DEFAULT_LINE_REPLY_SETTINGS,
   LINE_FOOTER_PLACEHOLDERS,
   LINE_BUTTON_LABEL_MAX,
+  LINE_CART_QTY_MAX,
+  LINE_CART_QTY_MIN,
   LINE_MESSAGE_TEXT_MAX,
   LINE_REPLY_TEXT_MAX,
   LINE_TEMPLATE_PLACEHOLDERS,
@@ -14,6 +16,7 @@ import {
   renderLineFooterTemplate,
   renderLineMessageTemplate,
   validateLineReplySettings,
+  type LineLinkTarget,
   type LineProductButtonMode,
   type LineReplySettings,
   type LineTemplateValues
@@ -23,16 +26,29 @@ type TemplateField = "message_template" | "reply_template" | "result_footer_temp
 
 const MODE_OPTIONS: { value: LineProductButtonMode; label: string; hint: string }[] = [
   {
-    value: "message",
-    label: "สั่งซื้อผ่านแชท + ตอบกลับอัตโนมัติ (แนะนำ)",
-    hint: "ลูกค้ากดปุ่มแล้วส่งข้อความสั่งซื้อเข้าแชท บอทตอบกลับด้วยข้อความที่ตั้งไว้ด้านล่าง แล้วแอดมินคุยต่อเอง"
+    value: "both",
+    label: "แสดงทั้ง 2 ปุ่ม (แนะนำ)",
+    hint: "ปุ่มเปิดเว็บ (เช่น สั่งซื้อสินค้า → ใส่ตะกร้าให้เลย) + ปุ่มสอบถามแอดมินในแชท (มีตอบกลับอัตโนมัติ)"
   },
-  { value: "both", label: "แสดงทั้ง 2 ปุ่ม", hint: "ปุ่มสั่งซื้อผ่านแชท (มีตอบกลับ) + ปุ่มเปิดหน้าสินค้าบนเว็บ" },
   {
     value: "link",
-    label: "เปิดลิงก์สินค้าอย่างเดียว",
+    label: "ปุ่มเปิดเว็บอย่างเดียว",
     hint: "ลูกค้ากดแล้วเปิดเว็บทันที — LINE ไม่แจ้งระบบ จึงตอบกลับอัตโนมัติไม่ได้"
+  },
+  {
+    value: "message",
+    label: "ปุ่มส่งข้อความในแชทอย่างเดียว",
+    hint: "ลูกค้ากดแล้วส่งข้อความเข้าแชท บอทตอบกลับด้วยข้อความที่ตั้งไว้ แล้วแอดมินคุยต่อเอง"
   }
+];
+
+const LINK_TARGET_OPTIONS: { value: LineLinkTarget; label: string; hint: string }[] = [
+  {
+    value: "cart",
+    label: "ใส่ตะกร้าแล้วเปิดหน้าตะกร้า",
+    hint: "ถ้าลูกค้ายังไม่ได้ล็อกอิน เว็บจะล็อกอินด้วย LINE ให้ก่อนแล้วพากลับมาใส่ตะกร้า"
+  },
+  { value: "product", label: "เปิดหน้าสินค้า", hint: "ให้ลูกค้าดูรายละเอียดและเลือกจำนวนเองบนเว็บ" }
 ];
 
 const SAMPLE_VALUES: LineTemplateValues = {
@@ -85,7 +101,7 @@ export default function LineReplySettingsPage() {
     const { data, error: fetchError } = await supabase
       .from("line_reply_settings")
       .select(
-        "button_mode,link_label,message_label,message_template,reply_enabled,reply_template,result_footer_enabled,result_footer_template"
+        "button_mode,link_label,link_target,cart_quantity,message_label,message_template,reply_enabled,reply_template,result_footer_enabled,result_footer_template"
       )
       .eq("id", "default")
       .maybeSingle();
@@ -152,6 +168,8 @@ export default function LineReplySettingsPage() {
       .update({
         button_mode: form.button_mode,
         link_label: form.link_label.trim(),
+        link_target: form.link_target,
+        cart_quantity: form.cart_quantity,
         message_label: form.message_label.trim(),
         message_template: form.message_template.trim(),
         reply_enabled: form.reply_enabled,
@@ -211,7 +229,7 @@ export default function LineReplySettingsPage() {
 
           {showLink && (
             <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontWeight: 600 }}>ชื่อปุ่มเปิดลิงก์</div>
+              <div style={{ fontWeight: 600 }}>ชื่อปุ่มเปิดเว็บ</div>
               <input
                 className="auth-input"
                 value={form.link_label}
@@ -220,6 +238,39 @@ export default function LineReplySettingsPage() {
                 placeholder="เช่น สั่งซื้อสินค้า"
                 disabled={loading}
               />
+              <div style={{ fontWeight: 600, marginTop: 6 }}>กดแล้วไปที่</div>
+              {LINK_TARGET_OPTIONS.map((option) => (
+                <label key={option.value} style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="line-link-target"
+                    checked={form.link_target === option.value}
+                    onChange={() => updateField("link_target", option.value)}
+                    disabled={loading}
+                  />
+                  <span>
+                    <span style={{ fontWeight: 500 }}>{option.label}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--text3)" }}>{option.hint}</span>
+                  </span>
+                </label>
+              ))}
+              {form.link_target === "cart" && (
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                  จำนวนที่ใส่ตะกร้า
+                  <input
+                    className="auth-input"
+                    type="number"
+                    min={LINE_CART_QTY_MIN}
+                    max={LINE_CART_QTY_MAX}
+                    step={1}
+                    value={form.cart_quantity}
+                    onChange={(event) => updateField("cart_quantity", Number(event.target.value))}
+                    style={{ width: 80 }}
+                    disabled={loading}
+                  />
+                  เส้น
+                </label>
+              )}
             </div>
           )}
 

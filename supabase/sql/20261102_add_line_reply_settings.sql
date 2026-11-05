@@ -2,10 +2,10 @@
 -- Single-row table (id = 'default'); webhook reads it with the service role.
 create table if not exists public.line_reply_settings (
   id text primary key default 'default' check (id = 'default'),
-  button_mode text not null default 'message' check (button_mode in ('link', 'message', 'both')),
-  link_label text not null default 'ดูหน้าสินค้า' check (char_length(link_label) between 1 and 20),
-  message_label text not null default 'สั่งซื้อสินค้า' check (char_length(message_label) between 1 and 20),
-  message_template text not null default 'ต้องการสั่งซื้อ {title} ขนาด {size} ราคา {price}'
+  button_mode text not null default 'both' check (button_mode in ('link', 'message', 'both')),
+  link_label text not null default 'สั่งซื้อสินค้า' check (char_length(link_label) between 1 and 20),
+  message_label text not null default 'สอบถามแอดมิน' check (char_length(message_label) between 1 and 20),
+  message_template text not null default 'สอบถามสินค้า {title} ขนาด {size} ราคา {price}'
     check (char_length(message_template) between 1 and 300),
   updated_by uuid references auth.users (id) on delete set null,
   updated_at timestamptz not null default now(),

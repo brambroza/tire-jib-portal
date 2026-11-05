@@ -7,6 +7,8 @@ import {
   LINE_MESSAGE_TEXT_MAX,
   LINE_REPLY_TEXT_MAX,
   buildOrderPostbackData,
+  buildQuickOrderUrl,
+  resolveLinkButtonUrl,
   normalizeLineReplySettings,
   parseOrderPostbackData,
   renderLineFooterTemplate,
@@ -26,11 +28,10 @@ const VALUES: LineTemplateValues = {
   url: "https://example.com/products/1"
 };
 
-test("normalize: null/garbage falls back to defaults (order-via-chat button)", () => {
+test("normalize: null/garbage falls back to defaults", () => {
   assert.deepEqual(normalizeLineReplySettings(null), DEFAULT_LINE_REPLY_SETTINGS);
   assert.deepEqual(normalizeLineReplySettings("x"), DEFAULT_LINE_REPLY_SETTINGS);
-  assert.equal(normalizeLineReplySettings({ button_mode: "evil" }).button_mode, "message");
-  assert.equal(DEFAULT_LINE_REPLY_SETTINGS.message_label, "สั่งซื้อสินค้า");
+  assert.equal(normalizeLineReplySettings({ button_mode: "evil" }).button_mode, "both");
 });
 
 test("normalize: blank labels fall back, long labels truncated by code point", () => {
@@ -65,7 +66,7 @@ test("buttons: message mode = single primary postback button with rendered displ
   assert.equal(buttons[0].style, "primary");
   assert.deepEqual(buttons[0].action, {
     type: "postback",
-    label: "สั่งซื้อสินค้า",
+    label: "สอบถามแอดมิน",
     data: `action=order&sku=${SKU_ID}`,
     displayText: "ขอราคา 225/45R17"
   });
@@ -150,6 +151,42 @@ test("footer: normalize + validate", () => {
   );
   assert.equal(
     validateLineReplySettings({ ...DEFAULT_LINE_REPLY_SETTINGS, result_footer_enabled: false, result_footer_template: "" }),
+    null
+  );
+});
+
+test("defaults: สั่งซื้อสินค้า goes to cart with qty 1, plus สอบถามแอดมิน chat button", () => {
+  assert.equal(DEFAULT_LINE_REPLY_SETTINGS.button_mode, "both");
+  assert.equal(DEFAULT_LINE_REPLY_SETTINGS.link_label, "สั่งซื้อสินค้า");
+  assert.equal(DEFAULT_LINE_REPLY_SETTINGS.link_target, "cart");
+  assert.equal(DEFAULT_LINE_REPLY_SETTINGS.cart_quantity, 1);
+});
+
+test("quick order url: encodes sku/qty/nonce and strips trailing slash", () => {
+  assert.equal(
+    buildQuickOrderUrl("https://shop.example/", SKU_ID, 4, "ab12cd34"),
+    `https://shop.example/line/order?sku=${SKU_ID}&qty=4&n=ab12cd34`
+  );
+});
+
+test("link url: cart target uses quick order, product target uses product page", () => {
+  const input = { storefrontBase: "https://shop.example", skuId: SKU_ID, productUrl: VALUES.url, nonce: "nonce123" };
+  assert.match(resolveLinkButtonUrl(DEFAULT_LINE_REPLY_SETTINGS, input), /\/line\/order\?sku=.*&qty=1&n=nonce123$/);
+  const product = normalizeLineReplySettings({ link_target: "product" });
+  assert.equal(resolveLinkButtonUrl(product, input), VALUES.url);
+  const buttons = buildLineProductButtons(DEFAULT_LINE_REPLY_SETTINGS, VALUES, SKU_ID, "https://x/line/order?sku=1");
+  assert.deepEqual(buttons[0].action, { type: "uri", label: "สั่งซื้อสินค้า", uri: "https://x/line/order?sku=1" });
+});
+
+test("normalize/validate link target and cart quantity", () => {
+  assert.equal(normalizeLineReplySettings({ link_target: "evil" }).link_target, "cart");
+  assert.equal(normalizeLineReplySettings({ cart_quantity: 4 }).cart_quantity, 4);
+  assert.equal(normalizeLineReplySettings({ cart_quantity: 0 }).cart_quantity, 1);
+  assert.equal(normalizeLineReplySettings({ cart_quantity: 2.5 }).cart_quantity, 1);
+  assert.match(validateLineReplySettings({ ...DEFAULT_LINE_REPLY_SETTINGS, cart_quantity: 9 }) ?? "", /จำนวน/);
+  assert.match(validateLineReplySettings({ ...DEFAULT_LINE_REPLY_SETTINGS, link_target: "x" as never }) ?? "", /ปลายทาง/);
+  assert.equal(
+    validateLineReplySettings({ ...DEFAULT_LINE_REPLY_SETTINGS, link_target: "product", cart_quantity: 0 }),
     null
   );
 });

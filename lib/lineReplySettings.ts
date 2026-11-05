@@ -7,10 +7,15 @@
  */
 
 export type LineProductButtonMode = "link" | "message" | "both";
+/** Where the link button goes: storefront quick-order (adds to cart, opens /cart) or product page. */
+export type LineLinkTarget = "cart" | "product";
 
 export type LineReplySettings = {
   button_mode: LineProductButtonMode;
   link_label: string;
+  link_target: LineLinkTarget;
+  /** Quantity added to cart when link_target = "cart". */
+  cart_quantity: number;
   message_label: string;
   message_template: string;
   /** Auto-reply sent by the bot after the customer taps the message button. */
@@ -50,23 +55,30 @@ export const LINE_BUTTON_LABEL_MAX = 20;
 export const LINE_MESSAGE_TEXT_MAX = 300;
 /** Max length for the bot auto-reply (LINE allows 5000; kept short for chat readability). */
 export const LINE_REPLY_TEXT_MAX = 1000;
+/** Allowed range for the quick-order quantity. */
+export const LINE_CART_QTY_MIN = 1;
+export const LINE_CART_QTY_MAX = 8;
 
 /** Postback `data` prefix identifying the "order via chat" button. */
 const ORDER_POSTBACK_ACTION = "order";
 
 export const DEFAULT_LINE_REPLY_SETTINGS: LineReplySettings = {
-  // Default: the "สั่งซื้อสินค้า" button posts into chat so the bot can auto-reply.
-  button_mode: "message",
-  link_label: "ดูหน้าสินค้า",
-  message_label: "สั่งซื้อสินค้า",
-  message_template: "ต้องการสั่งซื้อ {title} ขนาด {size} ราคา {price}",
+  // Default: "สั่งซื้อสินค้า" adds to the storefront cart and opens /cart;
+  // "สอบถามแอดมิน" posts into chat so the bot can auto-reply.
+  button_mode: "both",
+  link_label: "สั่งซื้อสินค้า",
+  link_target: "cart",
+  cart_quantity: 1,
+  message_label: "สอบถามแอดมิน",
+  message_template: "สอบถามสินค้า {title} ขนาด {size} ราคา {price}",
   reply_enabled: true,
-  reply_template: "รับคำสั่งซื้อ {title} ขนาด {size} ราคา {price} แล้วค่ะ\nแอดมินจะติดต่อกลับเพื่อยืนยันสต๊อกและนัดติดตั้งโดยเร็วที่สุด\nดูรายละเอียดสินค้า: {url}",
+  reply_template: "ได้รับข้อความเรื่อง {title} ขนาด {size} แล้วค่ะ\nแอดมินจะตอบกลับโดยเร็วที่สุด",
   result_footer_enabled: true,
   result_footer_template: "ดูทั้งหมด/สั่งซื้อ: {search_url}\nกลับหน้าเว็บ: {home_url}"
 };
 
 const BUTTON_MODES: LineProductButtonMode[] = ["link", "message", "both"];
+const LINK_TARGETS: LineLinkTarget[] = ["cart", "product"];
 
 /**
  * Coerce an untrusted DB row / request body into valid settings,
@@ -82,6 +94,12 @@ export function normalizeLineReplySettings(input: unknown): LineReplySettings {
 
   return {
     button_mode: mode,
+    link_target: LINK_TARGETS.includes(raw.link_target as LineLinkTarget)
+      ? (raw.link_target as LineLinkTarget)
+      : DEFAULT_LINE_REPLY_SETTINGS.link_target,
+    cart_quantity: isValidCartQuantity(raw.cart_quantity)
+      ? (raw.cart_quantity as number)
+      : DEFAULT_LINE_REPLY_SETTINGS.cart_quantity,
     link_label: cleanLabel(raw.link_label, DEFAULT_LINE_REPLY_SETTINGS.link_label),
     message_label: cleanLabel(raw.message_label, DEFAULT_LINE_REPLY_SETTINGS.message_label),
     message_template: cleanTemplate(raw.message_template, DEFAULT_LINE_REPLY_SETTINGS.message_template),
@@ -112,6 +130,12 @@ export function validateLineReplySettings(input: Partial<LineReplySettings>): st
   const messageLabel = (input.message_label ?? "").trim();
   const template = (input.message_template ?? "").trim();
   const usesLink = input.button_mode !== "message";
+  if (usesLink && !LINK_TARGETS.includes(input.link_target as LineLinkTarget)) {
+    return "ปลายทางของปุ่มลิงก์ไม่ถูกต้อง";
+  }
+  if (usesLink && input.link_target === "cart" && !isValidCartQuantity(input.cart_quantity)) {
+    return `จำนวนที่ใส่ตะกร้าต้องอยู่ระหว่าง ${LINE_CART_QTY_MIN}-${LINE_CART_QTY_MAX}`;
+  }
   const usesMessage = input.button_mode !== "link";
 
   if (usesLink && !linkLabel) return "กรุณากรอกชื่อปุ่มลิงก์";
@@ -199,14 +223,47 @@ export function parseOrderPostbackData(data: unknown): string | null {
 }
 
 /**
+ * Storefront quick-order link: adds the SKU to the cart (after LINE login if needed)
+ * and opens /cart. `nonce` lets the storefront ignore repeat taps of the same card.
+ * @param storefrontBase e.g. https://hijibjib.com (no trailing slash)
+ * @param skuId SKU id
+ * @param quantity items to add
+ * @param nonce short random id per card
+ */
+export function buildQuickOrderUrl(storefrontBase: string, skuId: string, quantity: number, nonce: string): string {
+  const params = new URLSearchParams({ sku: skuId, qty: String(quantity), n: nonce });
+  return `${storefrontBase.replace(/\/$/, "")}/line/order?${params.toString()}`;
+}
+
+/**
+ * Resolve the link button URL from settings.
+ * @param settings normalized settings
+ * @param input storefront base, SKU, product page URL and nonce
+ */
+export function resolveLinkButtonUrl(
+  settings: LineReplySettings,
+  input: { storefrontBase: string; skuId: string; productUrl: string; nonce: string }
+): string {
+  return settings.link_target === "cart"
+    ? buildQuickOrderUrl(input.storefrontBase, input.skuId, settings.cart_quantity, input.nonce)
+    : input.productUrl;
+}
+
+/**
  * Build the flex footer button list for one product card.
  * The chat button is a postback (shows `message_template` as the customer's message)
  * so the webhook knows which SKU was tapped and can send the admin's auto-reply.
  * @param settings normalized settings
- * @param values product values (url used for link button + {url} token)
+ * @param values product values ({url} token = product page)
  * @param skuId SKU id embedded in the postback data
+ * @param linkUrl URL for the link button (see resolveLinkButtonUrl); defaults to the product page
  */
-export function buildLineProductButtons(settings: LineReplySettings, values: LineTemplateValues, skuId: string) {
+export function buildLineProductButtons(
+  settings: LineReplySettings,
+  values: LineTemplateValues,
+  skuId: string,
+  linkUrl: string = values.url
+) {
   const buttons: Record<string, unknown>[] = [];
   const showLink = settings.button_mode !== "message";
   const showMessage = settings.button_mode !== "link";
@@ -216,7 +273,7 @@ export function buildLineProductButtons(settings: LineReplySettings, values: Lin
       type: "button",
       style: "primary",
       color: "#16a34a",
-      action: { type: "uri", label: settings.link_label, uri: values.url }
+      action: { type: "uri", label: settings.link_label, uri: linkUrl }
     });
   }
   if (showMessage) {
@@ -234,6 +291,10 @@ export function buildLineProductButtons(settings: LineReplySettings, values: Lin
     });
   }
   return buttons;
+}
+
+function isValidCartQuantity(value: unknown): boolean {
+  return Number.isInteger(value) && (value as number) >= LINE_CART_QTY_MIN && (value as number) <= LINE_CART_QTY_MAX;
 }
 
 function cleanLabel(value: unknown, fallback: string): string {

@@ -5,7 +5,7 @@ add column if not exists reply_enabled boolean not null default true;
 
 alter table if exists public.line_reply_settings
 add column if not exists reply_template text not null
-  default E'รับคำสั่งซื้อ {title} ขนาด {size} ราคา {price} แล้วค่ะ\nแอดมินจะติดต่อกลับเพื่อยืนยันสต๊อกและนัดติดตั้งโดยเร็วที่สุด\nดูรายละเอียดสินค้า: {url}';
+  default E'ได้รับข้อความเรื่อง {title} ขนาด {size} แล้วค่ะ\nแอดมินจะตอบกลับโดยเร็วที่สุด';
 
 alter table if exists public.line_reply_settings
 drop constraint if exists line_reply_settings_reply_template_check;
