@@ -1561,6 +1561,19 @@ async function replyWithTireSearchGuide(input: {
   });
 }
 
+/**
+ * Return a copy of the items ordered by price, lowest first.
+ * Items without a price ("สอบถามราคา") go last; ties keep their relevance order.
+ */
+function sortItemsByPriceAsc(items: NormalizedCatalogRow[]): NormalizedCatalogRow[] {
+  return [...items].sort((a, b) => {
+    const priceA = a.price ?? Number.POSITIVE_INFINITY;
+    const priceB = b.price ?? Number.POSITIVE_INFINITY;
+    if (priceA === priceB) return 0;
+    return priceA - priceB;
+  });
+}
+
 async function replyWithSearchResult(input: {
   accessToken: string;
   replyToken: string;
@@ -1665,7 +1678,8 @@ async function replyWithSearchResult(input: {
   }
 
 
-  const bubbles = items.map((item) => {
+  // Display cards cheapest first; relevance already picked the top 10 in searchCatalogItems.
+  const bubbles = sortItemsByPriceAsc(items).map((item) => {
     const productId = item.id as string;
     const templateValues = buildTemplateValues(item);
     const title = templateValues.title;
